@@ -6,6 +6,7 @@ A script for populating the Scareflix database with data from OpenMovieAPI.
 import json
 import sqlite3
 import sys
+import time
 import urllib2
 
 def main():
@@ -41,32 +42,53 @@ def populate(database, movie_names):
     acted_in_entries = []
     movie_types_entries = []
     for movie in movies_data:
-        # Gather movies
-        movie_id = movie["imdbID"]
-        movie_entries = movie_entries + [(
-            movie_id, movie["Title"], movie["Director"],
-            movie["Year"], movie["imdbRating"]
-            )]
+        try:
+            # Make sure movie data is good
+            if movie["imdbRating"] == "N/A":
+                raise KeyError
 
-        # Gather actors
-        actors = [name.strip() for name in movie["Actors"].split(',')]
-        for actor in actors:
-            acted_in_entries = acted_in_entries + [(
-                actor, movie_id
+            # Gather movies
+            movie_id = movie["imdbID"]
+            movie_entries = movie_entries + [(
+                movie_id, movie["Title"], movie["Director"],
+                movie["Year"], movie["imdbRating"]
                 )]
 
-        # Gather genres
-        genres = [name.strip() for name in movie["Genre"].split(',')]
-        for genre in genres:
-            movie_types_entries = movie_types_entries + [(
-                movie_id, genre
-                )]
+            # Gather actors
+            actors = [name.strip() for name in movie["Actors"].split(',')]
+            for actor in actors:
+                acted_in_entries = acted_in_entries + [(
+                    actor, movie_id
+                    )]
+
+            # Gather genres
+            genres = [name.strip() for name in movie["Genre"].split(',')]
+            for genre in genres:
+                movie_types_entries = movie_types_entries + [(
+                    movie_id, genre
+                    )]
+        except urllib2.HTTPError:
+            pass
+        except KeyError:
+            print "Invalid movie"
 
 
     # Put entries into the database
-    cursor.executemany("INSERT INTO Movie VALUES (?, ?, ?, ?, ?)", movie_entries)
-    cursor.executemany("INSERT INTO ActedIn VALUES (?, ?)", acted_in_entries)
-    cursor.executemany("INSERT INTO MovieTypes VALUES (?, ?)", movie_types_entries)
+    for entry in movie_entries:
+        try:
+            cursor.execute("INSERT INTO Movie VALUES (?, ?, ?, ?, ?)", entry)
+        except sqlite3.IntegrityError:
+            pass
+    for entry in acted_in_entries:
+        try:
+            cursor.execute("INSERT INTO ActedIn VALUES (?, ?)", entry)
+        except sqlite3.IntegrityError:
+            pass
+    for entry in movie_types_entries:
+        try:
+            cursor.execute("INSERT INTO MovieTypes VALUES (?, ?)", entry)
+        except sqlite3.IntegrityError:
+            pass
 
     # Close the database
     conn.commit()
@@ -84,8 +106,10 @@ def get_movies(movie_names):
     # Get the movie data from the api urls
     movies_data = []
     for url in movie_urls:
+        print url
         movie_string = urllib2.urlopen(url)
         movies_data = movies_data + [json.load(movie_string)]
+        time.sleep(1)
 
     return movies_data
 
