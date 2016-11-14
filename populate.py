@@ -4,6 +4,7 @@ A script for populating the Scareflix database with data from OpenMovieAPI.
 """
 
 import json
+import socket
 import sqlite3
 import sys
 import time
@@ -44,7 +45,7 @@ def populate(database, movie_names):
     for movie in movies_data:
         try:
             # Make sure movie data is good
-            if movie["imdbRating"] == "N/A":
+            if not movie["imdbRating"].replace(".", "").isdigit() or movie["Actors"] == "N/A" or movie["Genre"] == "N/A" or not movie["Year"].isdigit():
                 raise KeyError
 
             # Gather movies
@@ -105,11 +106,31 @@ def get_movies(movie_names):
 
     # Get the movie data from the api urls
     movies_data = []
+    counter = 0
+    total = len(movie_urls)
     for url in movie_urls:
-        print url
-        movie_string = urllib2.urlopen(url)
-        movies_data = movies_data + [json.load(movie_string)]
-        time.sleep(1)
+        #print url
+        try:
+            movie_string = urllib2.urlopen(url).read()
+
+            # Check that the movie was found
+            if len(movie_string) > 50:
+                try:
+                    movies_data = movies_data + [json.loads(movie_string)]
+                    counter = counter + 1
+                    print str(counter) + " / " + str(total)
+                except ValueError:
+                    print "Err:"
+                    print len(movie_string)
+                    print movie_string
+            else:
+                print url
+
+            time.sleep(0.5)
+
+        except socket.error:
+            print "Connection reset"
+
 
     return movies_data
 
